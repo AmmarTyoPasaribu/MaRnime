@@ -25,7 +25,6 @@ export const metadata: Metadata = {
   applicationName: siteConfig.name,
   keywords: ['anime', 'anime tracker', 'watchlist', 'anilist', 'myanimelist', 'seasonal anime', 'airing schedule', 'jadwal anime'],
   authors: [{ name: siteConfig.author.name }],
-  icons: { icon: '/logo.png', apple: '/logo.png' },
   openGraph: {
     type: 'website',
     siteName: siteConfig.name,
