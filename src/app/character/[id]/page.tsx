@@ -1,123 +1,84 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { anilistFetch } from '@/lib/anilist/client';
-import { CHARACTER_DETAIL } from '@/lib/anilist/queries';
-import type { CharacterDetail } from '@/lib/anilist/types';
-import { cleanDescription } from '@/lib/utils';
-import { Heart, Users } from 'lucide-react';
 import type { Metadata } from 'next';
+import { getCharacter, parseId } from '@/lib/anilist/server';
+import { getI18n } from '@/lib/i18n/server';
+import { label } from '@/lib/i18n/labels';
+import { compactNumber, formatBirthday, hexToRgb, plainText, titleOf } from '@/lib/utils';
+import PersonHero from '@/components/person/PersonHero';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { id } = await params;
-  try {
-    const data = await anilistFetch<{ Character: CharacterDetail }>(CHARACTER_DETAIL, { id: parseInt(id) });
-    return { title: data.Character.name.full };
-  } catch {
-    return { title: 'Character' };
-  }
+  const c = await getCharacter(parseId((await params).id));
+  const description = plainText(c.description, 160);
+  return {
+    title: c.name.full,
+    description,
+    openGraph: { title: c.name.full, description, images: [{ url: c.image.large }] },
+  };
 }
 
-export const revalidate = 3600;
-
 export default async function CharacterPage({ params }: PageProps) {
-  const { id } = await params;
-  const data = await anilistFetch<{ Character: CharacterDetail }>(CHARACTER_DETAIL, { id: parseInt(id) });
-  const character = data.Character;
-  const desc = cleanDescription(character.description);
+  const c = await getCharacter(parseId((await params).id));
+  const { t, locale } = await getI18n();
+  const edges = c.media.edges.filter((e) => !e.node.isAdult);
 
   return (
-    <div className="pt-20 max-w-5xl mx-auto px-4 sm:px-6 pb-12">
-      <div className="flex flex-col sm:flex-row gap-6 mb-8">
-        {/* Image */}
-        <div className="flex-shrink-0 mx-auto sm:mx-0">
-          <div className="relative w-[200px] aspect-[3/4] rounded-xl overflow-hidden ring-2 ring-[var(--color-border)]">
-            <Image
-              src={character.image.large}
-              alt={character.name.full}
-              fill
-              className="object-cover"
-              priority
-            />
-          </div>
-        </div>
+    <div className="pb-4 pt-2">
+      <PersonHero
+        image={c.image.large}
+        name={c.name.full}
+        native={c.name.native}
+        alternative={c.name.alternative}
+        favourites={compactNumber(c.favourites, locale)}
+        description={c.description}
+        siteUrl={c.siteUrl}
+        labels={{ favorites: t('favorites'), alsoKnown: t('alternativeNames'), viewOnAniList: t('viewOnAniList') }}
+        facts={[
+          [t('gender'), label.gender(c.gender, locale)],
+          [t('age'), c.age],
+          [t('birthday'), formatBirthday(c.dateOfBirth, locale)],
+          [t('bloodType'), c.bloodType],
+        ]}
+      />
 
-        {/* Info */}
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold mb-1">{character.name.full}</h1>
-          {character.name.native && (
-            <p className="text-sm text-[var(--color-text-muted)] mb-4">{character.name.native}</p>
-          )}
-
-          <div className="flex gap-4 mb-4">
-            <div className="flex items-center gap-1 text-sm text-[var(--color-text-secondary)]">
-              <Heart className="w-4 h-4 text-[var(--color-pink)]" />
-              {character.favourites?.toLocaleString()} favorites
-            </div>
-            {character.gender && (
-              <span className="badge">{character.gender}</span>
-            )}
-            {character.age && (
-              <span className="badge">Age: {character.age}</span>
-            )}
-          </div>
-
-          {desc && (
-            <div className="text-sm text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-line">
-              {desc}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Appearances */}
-      {character.media?.edges && character.media.edges.length > 0 && (
+      {edges.length > 0 && (
         <section>
-          <h2 className="section-title mb-4">Appearances</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {character.media.edges.map((edge, i) => (
-              <Link
-                key={i}
-                href={edge.node.type === 'ANIME' ? `/anime/${edge.node.id}` : '#'}
-                className="glass-card flex items-center gap-3 p-3 hover:bg-[var(--color-bg-card-hover)] transition-all"
-              >
-                <div className="relative w-12 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                  <Image
-                    src={edge.node.coverImage.medium}
-                    alt={edge.node.title.romaji}
-                    fill
-                    className="object-cover"
-                    sizes="48px"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {edge.node.title.english || edge.node.title.romaji}
-                  </p>
-                  <p className="text-xs text-[var(--color-text-muted)]">{edge.characterRole}</p>
-                </div>
-                {edge.voiceActors?.[0] && (
-                  <div className="flex items-center gap-2">
-                    <div className="text-right">
-                      <p className="text-xs truncate">{edge.voiceActors[0].name.full}</p>
-                      <p className="text-[10px] text-[var(--color-text-muted)]">{edge.voiceActors[0].languageV2}</p>
+          <h2 className="section-heading mb-5">
+            <span className="bar" />
+            {t('appearances')}
+          </h2>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {edges.map((e) => {
+              const va = e.voiceActors.find((v) => v.languageV2 === 'Japanese') ?? e.voiceActors[0];
+              return (
+                <div key={e.id} className="anime-card" style={{ '--card-accent': hexToRgb(e.node.coverImage.color) } as React.CSSProperties}>
+                  <Link href={`/anime/${e.node.id}`} className="block">
+                    <div className="poster">
+                      <Image src={e.node.coverImage.large} alt={titleOf(e.node.title)} fill sizes="(max-width: 640px) 46vw, 200px" className="object-cover" />
+                      <span className="absolute left-2 top-2 z-10 border-2 border-ink bg-pop-yellow px-1.5 py-0.5 text-[10px] font-bold">
+                        {label.role(e.characterRole, locale)}
+                      </span>
                     </div>
-                    <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
-                      <Image
-                        src={edge.voiceActors[0].image.medium}
-                        alt={edge.voiceActors[0].name.full}
-                        fill
-                        className="object-cover"
-                        sizes="40px"
-                      />
-                    </div>
-                  </div>
-                )}
-              </Link>
-            ))}
+                    <h3 className="mt-3 line-clamp-2 text-sm font-bold leading-snug"><span className="card-title">{titleOf(e.node.title)}</span></h3>
+                    <p className="mt-1 text-xs text-fg-3">
+                      {[label.format(e.node.format, locale), e.node.seasonYear].filter(Boolean).join(' · ')}
+                    </p>
+                  </Link>
+                  {va && (
+                    <Link href={`/staff/${va.id}`} className="mt-2 flex items-center gap-2 text-xs text-fg-2 hover:bg-pop-yellow">
+                      <span className="relative h-6 w-6 shrink-0 overflow-hidden border-2 border-ink">
+                        <Image src={va.image.medium} alt="" fill sizes="24px" className="object-cover" />
+                      </span>
+                      <span className="truncate">{va.name.full}</span>
+                    </Link>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

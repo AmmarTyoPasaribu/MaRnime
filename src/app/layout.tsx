@@ -1,63 +1,71 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
-import QueryProvider from "@/providers/QueryProvider";
-import AuthProvider from "@/providers/AuthProvider";
-import I18nProvider from "@/providers/I18nProvider";
+import type { Metadata, Viewport } from 'next';
+import { cookies } from 'next/headers';
+import { Archivo_Black, Space_Grotesk } from 'next/font/google';
+import './globals.css';
+import AppShell from '@/components/layout/AppShell';
+import QueryProvider from '@/providers/QueryProvider';
+import AuthProvider from '@/providers/AuthProvider';
+import I18nProvider from '@/providers/I18nProvider';
+import ToastProvider from '@/providers/ToastProvider';
+import DisplayModeProvider from '@/providers/DisplayModeProvider';
+import { VIEW_COOKIE, type DisplayMode } from '@/lib/display';
+import { getLocale } from '@/lib/i18n/server';
+import { siteConfig } from '@/lib/site';
+
+const grotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-grotesk', display: 'swap' });
+const archivo = Archivo_Black({ subsets: ['latin'], weight: '400', variable: '--font-archivo', display: 'swap' });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteConfig.url),
   title: {
-    default: "MaRnime - Discover & Track Anime",
-    template: "%s | MaRnime",
+    default: 'MaRnime — Discover & Track Anime',
+    template: '%s · MaRnime',
   },
-  description: "Discover trending anime, track your watchlist, and explore seasonal anime with MaRnime. Powered by AniList.",
-  keywords: ["anime", "manga", "watchlist", "anilist", "streaming", "tracker", "seasonal anime"],
-  icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
-  },
+  description: siteConfig.description,
+  applicationName: siteConfig.name,
+  keywords: ['anime', 'anime tracker', 'watchlist', 'anilist', 'myanimelist', 'seasonal anime', 'airing schedule', 'jadwal anime'],
+  authors: [{ name: siteConfig.author.name }],
+  icons: { icon: '/logo.png', apple: '/logo.png' },
   openGraph: {
-    title: "MaRnime - Discover & Track Anime",
-    description: "Discover trending anime, track your watchlist, and explore seasonal anime with MaRnime.",
-    type: "website",
-    siteName: "MaRnime",
+    type: 'website',
+    siteName: siteConfig.name,
+    title: 'MaRnime — Discover & Track Anime',
+    description: siteConfig.description,
   },
   twitter: {
-    card: "summary_large_image",
-    title: "MaRnime - Discover & Track Anime",
-    description: "Discover trending anime, track your watchlist, and explore seasonal anime.",
+    card: 'summary_large_image',
+    title: 'MaRnime — Discover & Track Anime',
+    description: siteConfig.description,
   },
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export const viewport: Viewport = {
+  themeColor: '#ffe94d',
+  colorScheme: 'light',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
+
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getLocale();
+  const view: DisplayMode = (await cookies()).get(VIEW_COOKIE)?.value === 'text' ? 'text' : 'card';
+
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="antialiased">
-        <I18nProvider>
-          <AuthProvider>
-            <QueryProvider>
-              <Navbar />
-              <main className="min-h-screen">
-                {children}
-              </main>
-              <Footer />
-            </QueryProvider>
-          </AuthProvider>
-        </I18nProvider>
+    <html lang={locale} className={`${grotesk.variable} ${archivo.variable}`}>
+      <body>
+        <QueryProvider>
+          <I18nProvider initialLocale={locale}>
+            <DisplayModeProvider initialMode={view}>
+              <AuthProvider>
+                <ToastProvider>
+                  <AppShell>{children}</AppShell>
+                </ToastProvider>
+              </AuthProvider>
+            </DisplayModeProvider>
+          </I18nProvider>
+        </QueryProvider>
       </body>
     </html>
   );

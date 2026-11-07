@@ -1,38 +1,33 @@
 'use client';
 
-import { useEffect } from 'react';
 import Link from 'next/link';
+import { useEffect } from 'react';
 import { AlertTriangle, Home, RotateCcw } from 'lucide-react';
+import { useI18n } from '@/providers/I18nProvider';
 
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  const { t } = useI18n();
   useEffect(() => {
     console.error(error);
   }, [error]);
 
   return (
-    <div className="pt-20 min-h-screen flex items-center justify-center px-4">
-      <div className="text-center max-w-md">
-        <div className="w-16 h-16 rounded-full bg-[rgba(239,68,68,0.1)] flex items-center justify-center mx-auto mb-6">
-          <AlertTriangle className="w-8 h-8 text-[var(--color-red)]" />
+    <div className="grid min-h-[70vh] place-items-center py-16">
+      <div className="max-w-md text-center">
+        <div className="mx-auto mb-6 grid h-16 w-16 rotate-[-6deg] place-items-center border-[3px] border-ink bg-pop-pink shadow-brut">
+          <AlertTriangle className="h-8 w-8" strokeWidth={2.5} />
         </div>
-        <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
-        <p className="text-sm text-[var(--color-text-muted)] mb-8">
-          An error occurred while loading this page. This might be a temporary issue — try refreshing.
-        </p>
-        <div className="flex gap-3 justify-center">
-          <button onClick={reset} className="btn-primary">
-            <RotateCcw className="w-4 h-4" />
-            Try Again
+        <h1 className="font-display text-3xl uppercase">{t('somethingWrong')}</h1>
+        <p className="mt-3 text-fg-3">{t('somethingWrongDesc')}</p>
+        {error.digest && <p className="mt-2 font-mono text-xs text-fg-3">#{error.digest}</p>}
+        <div className="mt-8 flex justify-center gap-3">
+          <button onClick={reset} className="btn btn-primary">
+            <RotateCcw className="h-4 w-4" />
+            {t('tryAgain')}
           </button>
-          <Link href="/" className="btn-secondary">
-            <Home className="w-4 h-4" />
-            Go Home
+          <Link href="/" className="btn btn-secondary">
+            <Home className="h-4 w-4" />
+            {t('goHome')}
           </Link>
         </div>
       </div>

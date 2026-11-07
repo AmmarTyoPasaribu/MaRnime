@@ -1,165 +1,222 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Check, ChevronDown, Heart, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
-import { createClient } from '@/lib/supabase/client';
-import { Plus, Check, ChevronDown, Loader2 } from 'lucide-react';
+import { useI18n } from '@/providers/I18nProvider';
+import { useToast } from '@/providers/ToastProvider';
+import { label } from '@/lib/i18n/labels';
+import { cn } from '@/lib/utils';
+import {
+  LIST_STATUSES,
+  STATUS_COLOR,
+  useFavorites,
+  useRemoveEntry,
+  useSaveEntry,
+  useToggleFavorite,
+  useWatchlistEntry,
+  type AnimeRef,
+  type ListStatus,
+} from '@/lib/watchlist';
+import ListEditor from './ListEditor';
 
-interface WatchlistButtonProps {
-  animeId: number;
-  animeTitle: string;
-  animeImage: string;
-  totalEpisodes: number | null;
-}
-
-const STATUS_OPTIONS = [
-  { value: 'watching', label: '▶️ Watching', color: 'var(--color-green)' },
-  { value: 'planning', label: '📌 Plan to Watch', color: 'var(--color-accent-hover)' },
-  { value: 'completed', label: '✅ Completed', color: 'var(--color-green)' },
-  { value: 'on_hold', label: '⏸️ On Hold', color: 'var(--color-yellow)' },
-  { value: 'dropped', label: '❌ Dropped', color: 'var(--color-red)' },
-];
-
-export default function WatchlistButton({ animeId, animeTitle, animeImage, totalEpisodes }: WatchlistButtonProps) {
-  const { user } = useAuth();
-  const [currentStatus, setCurrentStatus] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
+export default function WatchlistButton({ anime, className, size = 'md' }: { anime: AnimeRef; className?: string; size?: 'md' | 'lg' }) {
+  const { user, loading: authLoading } = useAuth();
+  const { t, locale } = useI18n();
+  const { toast } = useToast();
+  const pathname = usePathname();
+  const { entry, isLoading } = useWatchlistEntry(anime.id);
+  const save = useSaveEntry();
+  const remove = useRemoveEntry();
+  const [menu, setMenu] = useState(false);
+  const [editor, setEditor] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!user) return;
-    const supabase = createClient();
-    if (!supabase) return;
-    supabase
-      .from('watchlist')
-      .select('status')
-      .eq('user_id', user.id)
-      .eq('anime_id', animeId)
-      .single()
-      .then(({ data }: { data: { status: string } | null }) => {
-        if (data) setCurrentStatus(data.status);
-      });
-  }, [user, animeId]);
+    if (!menu) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setMenu(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [menu]);
+
+  const btnSize = size === 'lg' ? 'btn-lg' : '';
+
+  if (authLoading || (user && isLoading)) {
+    return <div className={cn('skeleton h-[2.75rem] w-full', size === 'lg' && 'h-[3.25rem]', className)} />;
+  }
 
   if (!user) {
     return (
-      <a href="/login" className="btn-primary w-full text-center text-sm justify-center">
-        <Plus className="w-4 h-4" />
-        Sign in to add
-      </a>
+      <Link href={`/login?next=${encodeURIComponent(pathname)}`} className={cn('btn btn-secondary', btnSize, className || 'w-full')}>
+        <Plus className="h-4 w-4" />
+        {t('signInToAdd')}
+      </Link>
     );
   }
 
-  const handleStatusChange = async (newStatus: string) => {
-    setLoading(true);
-    setShowDropdown(false);
+  const setStatus = async (status: ListStatus) => {
+    setMenu(false);
     try {
-      const supabase = createClient();
-      if (currentStatus) {
-        // Update
-        await supabase
-          .from('watchlist')
-          .update({
-            status: newStatus,
-            updated_at: new Date().toISOString(),
-            ...(newStatus === 'completed' ? { completed_at: new Date().toISOString().split('T')[0] } : {}),
-          })
-          .eq('user_id', user.id)
-          .eq('anime_id', animeId);
-      } else {
-        // Insert
-        await supabase.from('watchlist').insert({
-          user_id: user.id,
-          anime_id: animeId,
-          anime_title: animeTitle,
-          anime_image: animeImage,
-          anime_total_episodes: totalEpisodes,
-          status: newStatus,
-          started_at: newStatus === 'watching' ? new Date().toISOString().split('T')[0] : null,
-          completed_at: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : null,
-        });
-      }
-      setCurrentStatus(newStatus);
-    } catch (err) {
-      console.error('Failed to update watchlist:', err);
-    } finally {
-      setLoading(false);
+      await save.mutateAsync({ anime, patch: { status } });
+      toast(t('savedToList', { status: label.listStatus(status, locale) }));
+    } catch {
+      toast(t('actionFailed'), 'error');
     }
   };
 
-  const handleRemove = async () => {
-    setLoading(true);
-    setShowDropdown(false);
+  const onRemove = async () => {
+    setMenu(false);
     try {
-      const supabase = createClient();
-      await supabase
-        .from('watchlist')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('anime_id', animeId);
-      setCurrentStatus(null);
-    } catch (err) {
-      console.error('Failed to remove from watchlist:', err);
-    } finally {
-      setLoading(false);
+      await remove.mutateAsync(anime.id);
+      toast(t('removedFromList'), 'info');
+    } catch {
+      toast(t('actionFailed'), 'error');
     }
   };
 
-  const currentLabel = STATUS_OPTIONS.find((s) => s.value === currentStatus);
+  const busy = save.isPending || remove.isPending;
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setShowDropdown(!showDropdown)}
-        disabled={loading}
-        className={`w-full text-sm justify-center ${currentStatus ? 'btn-secondary' : 'btn-primary'}`}
-      >
-        {loading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : currentStatus ? (
-          <>
-            <Check className="w-4 h-4" />
-            {currentLabel?.label || currentStatus}
-          </>
-        ) : (
-          <>
-            <Plus className="w-4 h-4" />
-            Add to List
-          </>
-        )}
-        <ChevronDown className="w-3 h-3 ml-auto" />
-      </button>
+    <div ref={ref} className={cn('relative', className)}>
+      <div className={cn('flex w-full border-[3px] border-ink shadow-brut transition-transform', size === 'lg' ? 'h-[3.25rem]' : 'h-[2.75rem]')}>
+        <button
+          onClick={() => (entry ? setEditor(true) : setStatus('planning'))}
+          disabled={busy}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-2 px-3 text-sm font-bold text-ink transition-colors disabled:opacity-60',
+            entry ? 'bg-white hover:bg-surface-2' : 'bg-pop-yellow hover:bg-[#fff06e]'
+          )}
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : entry ? (
+            <>
+              <span className="h-3.5 w-3.5 border-2 border-ink" style={{ background: STATUS_COLOR[entry.status] }} />
+              <span className="truncate">{label.listStatus(entry.status, locale)}</span>
+              {entry.status === 'watching' && (
+                <span className="bg-ink px-1.5 text-xs text-white">
+                  {entry.episodes_watched}/{anime.episodes ?? '?'}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              {t('addToList')}
+            </>
+          )}
+        </button>
+        <button
+          onClick={() => setMenu((m) => !m)}
+          aria-haspopup="menu"
+          aria-expanded={menu}
+          aria-label={t('status')}
+          className={cn('grid w-11 place-items-center border-l-[3px] border-ink text-ink transition-colors', entry ? 'bg-white hover:bg-pop-yellow' : 'bg-pop-yellow hover:bg-[#fff06e]')}
+        >
+          <ChevronDown className={cn('h-4 w-4 transition-transform', menu && 'rotate-180')} strokeWidth={3} />
+        </button>
+      </div>
 
-      {showDropdown && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
-          <div className="absolute top-full left-0 right-0 mt-1 z-50 glass-card py-1 shadow-xl">
-            {STATUS_OPTIONS.map((opt) => (
+      <AnimatePresence>
+        {menu && (
+          <motion.div
+            role="menu"
+            initial={{ opacity: 0, y: -8, rotate: -1 }}
+            animate={{ opacity: 1, y: 0, rotate: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+            className="brut absolute left-0 right-0 top-full z-40 mt-3 min-w-56 p-1.5 text-ink"
+          >
+            {LIST_STATUSES.map((s) => (
               <button
-                key={opt.value}
-                onClick={() => handleStatusChange(opt.value)}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-bg-card-hover)] transition-colors flex items-center gap-2 ${
-                  currentStatus === opt.value ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)]'
-                }`}
+                key={s}
+                role="menuitem"
+                onClick={() => setStatus(s)}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-bold transition hover:bg-pop-yellow"
               >
-                {opt.label}
-                {currentStatus === opt.value && <Check className="w-3 h-3 ml-auto" />}
+                <span className="h-3.5 w-3.5 border-2 border-ink" style={{ background: STATUS_COLOR[s] }} />
+                {label.listStatus(s, locale)}
+                {entry?.status === s && <Check className="ml-auto h-4 w-4" strokeWidth={3} />}
               </button>
             ))}
-            {currentStatus && (
-              <>
-                <div className="border-t border-[var(--color-border)] my-1" />
-                <button
-                  onClick={handleRemove}
-                  className="w-full text-left px-3 py-2 text-sm text-[var(--color-red)] hover:bg-[rgba(239,68,68,0.1)] transition-colors"
-                >
-                  Remove from List
-                </button>
-              </>
+            <div className="my-1 h-[3px] bg-ink" />
+            <button
+              role="menuitem"
+              onClick={() => {
+                setMenu(false);
+                setEditor(true);
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-bold transition hover:bg-pop-yellow"
+            >
+              <Pencil className="h-4 w-4" />
+              {t('editEntry')}
+            </button>
+            {entry && (
+              <button
+                role="menuitem"
+                onClick={onRemove}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-bold text-danger transition hover:bg-pop-pink hover:text-ink"
+              >
+                <Trash2 className="h-4 w-4" />
+                {t('remove')}
+              </button>
             )}
-          </div>
-        </>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <ListEditor open={editor} onClose={() => setEditor(false)} anime={anime} entry={entry} />
     </div>
+  );
+}
+
+export function FavoriteButton({ anime, className }: { anime: AnimeRef; className?: string }) {
+  const { user } = useAuth();
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const pathname = usePathname();
+  const { data: favorites } = useFavorites();
+  const toggle = useToggleFavorite();
+  const isFav = !!favorites?.some((f) => f.anime_id === anime.id);
+
+  if (!user) {
+    return (
+      <Link href={`/login?next=${encodeURIComponent(pathname)}`} className={cn('btn w-[2.75rem] px-0', className)} aria-label={t('favorite')}>
+        <Heart className="h-5 w-5" />
+      </Link>
+    );
+  }
+
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await toggle.mutateAsync({ anime, favorite: !isFav });
+          toast(isFav ? t('removedFavorite') : t('addedFavorite'), isFav ? 'info' : 'success');
+        } catch {
+          toast(t('actionFailed'), 'error');
+        }
+      }}
+      aria-pressed={isFav}
+      aria-label={t('favorite')}
+      title={t('favorite')}
+      className={cn(
+        'btn w-[2.75rem] px-0',
+        isFav ? 'bg-pop-pink' : 'bg-white',
+        className
+      )}
+    >
+      <motion.span key={String(isFav)} initial={{ scale: 0.6 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 15 }}>
+        <Heart className={cn('h-5 w-5', isFav && 'fill-current')} />
+      </motion.span>
+    </button>
   );
 }

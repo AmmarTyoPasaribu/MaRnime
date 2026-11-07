@@ -1,30 +1,23 @@
 import Link from 'next/link';
-import { Home, Search } from 'lucide-react';
+import { Compass, Home } from 'lucide-react';
+import { getI18n } from '@/lib/i18n/server';
 
-export default function NotFound() {
+export default async function NotFound() {
+  const { t } = await getI18n();
   return (
-    <div className="pt-20 min-h-screen flex items-center justify-center px-4">
+    <div className="grid min-h-[70vh] place-items-center py-16">
       <div className="text-center">
-        <div className="relative mb-6">
-          <span className="text-[120px] sm:text-[180px] font-black leading-none gradient-text opacity-20">
-            404
-          </span>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-6xl">😵</span>
-          </div>
-        </div>
-        <h1 className="text-2xl font-bold mb-2">Page Not Found</h1>
-        <p className="text-sm text-[var(--color-text-muted)] mb-8 max-w-md mx-auto">
-          The page you&#39;re looking for doesn&#39;t exist or has been moved. Maybe the anime you&#39;re searching for is in another dimension.
-        </p>
-        <div className="flex gap-3 justify-center">
-          <Link href="/" className="btn-primary">
-            <Home className="w-4 h-4" />
-            Go Home
+        <p className="inline-block select-none border-[3px] border-ink bg-pop-yellow px-6 font-display text-[7rem] leading-none shadow-brut-lg [transform:rotate(-3deg)] sm:text-[10rem]">404</p>
+        <h1 className="mt-8 font-display text-3xl uppercase">{t('pageNotFound')}</h1>
+        <p className="mx-auto mt-3 max-w-md text-fg-3">{t('pageNotFoundDesc')}</p>
+        <div className="mt-8 flex justify-center gap-3">
+          <Link href="/" className="btn btn-primary">
+            <Home className="h-4 w-4" />
+            {t('goHome')}
           </Link>
-          <Link href="/browse" className="btn-secondary">
-            <Search className="w-4 h-4" />
-            Browse Anime
+          <Link href="/browse" className="btn btn-secondary">
+            <Compass className="h-4 w-4" />
+            {t('browseAnime')}
           </Link>
         </div>
       </div>
